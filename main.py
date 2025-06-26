@@ -52,13 +52,33 @@ class BookTrackerApp:
         Loads book data from the JSON file.
         If the file doesn't exist or is invalid, an empty list is initialized.
         """
+        if os.path.exists(self.data_file):
+            try:
+                with open(self.data_file, 'r', encoding='utf-8') as f:
+                    self.books = json.load(f)
+                print(f"Loaded {len(self.books)} books from {self.data_file}")
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON from {self.data_file}: {e}. Starting with empty book list.")
+                self.books = [] # Reset if file is corrupted
+            except Exception as e:
+                print(f"An unexpected error occurred while loading books: {e}. Starting with empty book list")
+                self.books = []
+        else:
+            print(f"no data file found at {self.data_file}. Starting with an empty book list.")
+            self.books = [] # Initialize empty list if file doesn't exist
+
         # TODO
 
     def _save_books(self):
         """
         Saves current book data to the JSON file.
         """
-        # TODO
+        try:
+            with open(self.data_file, 'w', encoding='utf-8') as f:
+                json.dump(self.books, f, indent=4)
+            print(f"Saved {len(self.books)} books to {self.data_file}")
+        except Exception as e:
+                print(f"Error saving books to {self.data_file}: {e}")
 
     def _load_default_images(self):
         """
@@ -115,15 +135,16 @@ class BookTrackerApp:
         self.book_list_frame.bind("<Configure>", lambda e: self.book_canvas.configure(scrollregion=self.book_canvas.bbox("all"))) # lamda used to wrap function with arguments
         self.book_canvas.bind("<Configure>", self._on_canvas_configure)
 
-
-        # TODO
-
     def _on_canvas_configure(self, event):
         """
         Callback function executed when the main canvas has been resized.
         This updates the width of the inner book list frame to match the canvas width,
         ensuring that book entries expand correctly and horizontal scrollbars are not needed.
         """
+        canvas_width = event.width
+        # Get the ID of the window item embedded within the canvas (book_list_frame)
+        canvas_window_id = self.book_canvas.find_all()[-1]
+        self.book_canvas.itemconfig(canvas_window_id, width=canvas_width)
 
     def _refresh_book_display(self):
         """
@@ -215,6 +236,30 @@ class BookTrackerApp:
         author_entry.grid(row=1, column=1, sticky='ew', pady=2, padx=5)
 
         #TODO
+
+    def _confirm_delete_book(self, index):
+        """
+        Displays a confirmation message box before deleting a book
+        Args:
+            index (int): The index of the book to be deleted
+        """
+        book_title = self.books[index]['title']
+        # Message box returns True or False for 'Yes' or 'No' selected respectively
+        if messagebox.askyesno(
+            "Confirm Delete",
+            f"Are you sure you want to delete '{book_title}'?\nThis action cannot be undone."
+        ):
+            self._delete_book(index) # Proceed with deletion
+
+    def _delete_book(self, index):
+        """
+        Deletes a book from the list and refreshes the display
+        Args:
+            index (int): The index of the book to be deleted
+        """
+        del self.books[index] # Removes the book from the list
+        self._save_books() # Update the data for the file
+        self._refresh_book_display() # Update the UI to reflect the deletion
 
 if __name__ == "__main__":
     root = tk.Tk()
