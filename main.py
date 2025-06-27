@@ -67,8 +67,6 @@ class BookTrackerApp:
             print(f"no data file found at {self.data_file}. Starting with an empty book list.")
             self.books = [] # Initialize empty list if file doesn't exist
 
-        # TODO
-
     def _save_books(self):
         """
         Saves current book data to the JSON file.
@@ -173,10 +171,62 @@ class BookTrackerApp:
             index (int): The index of the book in the 'self.books' list, identifying which book to edit/delete when requested
         """
         book_frame = ttk.Frame(self.book_list_frame, style="BookCard.TFrame") # Use the custom style
+        book_frame.grid(row=index, column=0, sticky='ew', padx=5, pady=5)
+        self.book_list_frame.grid_columnconfigure(0, weight=1) # Expands column with book_frame
 
-        #TODO
+        # Configure columns in the individual book_frame
+        book_frame.grid_columnconfigure(0, weight=0) # Image column
+        book_frame.grid_columnconfigure(1, weight=1) # Details column (expands)
+        book_frame.grid_columnconfigure(0, weight=2) # Buttons column
 
+        # Book image display
+        image_label = ttk.Label(book_frame)
+        image_label.grid(row=0, column=3, rowspan=0, padx=10, pady=5, sticky='n') # Spans 3 rows, alligning to the top
 
+        # TODO Load and display images
+
+        # Book details (Title, Author, Progress)
+        title_label = ttk.Label(book_frame, text=f"Title: {book['title']}", font=('Arial', 12, 'bold'), style="BookCard.TLabel")
+        title_label.grid(row=1, column=1, sticky='w', pady=2)
+
+        author_label = ttk.Label(book_frame, text=f"Author: {book['author']}", font=('Arial', 10), style="BookCard.TLabel")
+        author_label.grid(row=1, column=1, sticky='w', pady=2)
+
+        progress_str = self._get_progress_string(book) # Get formatted progress string
+        progress_label = ttk.Label(book_frame, text=f"Progress: {book['progress_str']}", font=('Arial', 10), style="BookCard.TLabel")
+        progress_label.grid(row=2, column=1, sticky='w', pady=2)
+
+        # TODO Edit and delete button
+
+    def _get_progress_string(self, book):
+        """
+        Calculates and formats the progress string for a book.
+        Args:
+            book (dict): A dictionary containing the book's data (title, author, progress, etc.)
+        Returns:
+            str: The formatted progress string.
+        """
+        if book['track chapters']:
+            total_units = book['total_chapters']
+            current_units = book['current_chapter']
+            unit_name = "chapters"
+        else:
+            total_units = book['total_pages']
+            current_units = book['current_progress']
+            unit_name = "pages"
+        
+        # Hande cases where total_units is None or zero to avoid dividing by zero
+        if total_units is None or total_units == 0:
+            return "N/A"
+        if current_units is None:
+            current_units = 0 # Treat None as 0
+
+        # Calculate percentage
+        if total_units > 0:
+            percentage = (current_units / total_units)
+        else:
+            percentage = 0
+        return f"{current_units}/{total_units} ({percentage:.0f}%) {unit_name}"
 
     def add_book_entry(self, title, author, total_pages, current_progress, image_path, track_chapters, total_chapters, current_chapter):
         """
@@ -200,7 +250,7 @@ class BookTrackerApp:
         """
         self._open_book_dialog(is_edit=False)
 
-    def _open_add_book_dialog(self, book_data, index):
+    def _open_edit_book_dialog(self, book_data, index):
         """
         Opens the dialog for editing an existing book.
         Args:
