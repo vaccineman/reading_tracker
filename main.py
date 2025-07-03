@@ -117,7 +117,7 @@ class BookTrackerApp:
 
         # Canvas for scrollable content
         self.book_canvas = tk.Canvas(self.books_list_container, bg='white')
-        self.book_canvas.grid(row=0, column=1, sticky='nsew')
+        self.book_canvas.grid(row=0, column=0, sticky='nsew')
 
         # Vertical Scrollbar for the canvas
         self.book_scrollbar = ttk.Scrollbar(self.books_list_container, orient="vertical", command=self.book_canvas.yview)
@@ -187,7 +187,7 @@ class BookTrackerApp:
 
         # Book details (Title, Author, Progress)
         title_label = ttk.Label(book_frame, text=f"Title: {book['title']}", font=('Arial', 12, 'bold'), style="BookCard.TLabel")
-        title_label.grid(row=1, column=1, sticky='w', pady=2)
+        title_label.grid(row=0, column=1, sticky='w', pady=2)
 
         author_label = ttk.Label(book_frame, text=f"Author: {book['author']}", font=('Arial', 10), style="BookCard.TLabel")
         author_label.grid(row=1, column=1, sticky='w', pady=2)
@@ -335,10 +335,10 @@ class BookTrackerApp:
             # Populate chapter/page fields and handle None values
             if book_data['track_chapters']:
                 total_chapters_entry.insert(0, str(book_data['total_chapters']) if book_data['total_chapters'] is not None else "")
-                current_chapter_entry.insert(0, str(['current_chapter']) if book_data['current_chapter'] is not None else "")
+                current_chapter_entry.insert(0, str(book_data['current_chapter']) if book_data['current_chapter'] is not None else "")
             else:
                 total_pages_entry.insert(0, str(book_data['total_pages']) if book_data['total_pages'] is not None else "")
-                current_progress_entry.insert(0, str(['current_progress']) if book_data['current_progress'] is not None else "")
+                current_progress_entry.insert(0, str(book_data['current_progress']) if book_data['current_progress'] is not None else "")
         
         # Initial call to _toggle_chapter_inputs. Sets visibility of page/chapter inputs.
         self._toggle_chapter_inputs(
@@ -387,12 +387,6 @@ class BookTrackerApp:
         # Define the common grid parameters of the input labels and entries
         label_grid_params = {'column': 0, 'sticky': 'w', 'pady': 2}
         entry_grid_params = {'column': 1, 'sticky': 'ew', 'pady': 2, 'padx': 5}
-
-        # Clear existing text in all entries before toggling, preventing old values from reappearing when the checkbox is toggled.
-        total_pages_entry.delete(0, tk.END)
-        current_progress_entry.delete(0, tk.END)
-        total_chapters_entry.delete(0, tk.END)
-        current_chapter_entry.delete(0, tk.END)
 
         if track_chapters:
             # Hide page inputs
@@ -463,7 +457,7 @@ class BookTrackerApp:
         if (total_pages is not None and total_pages < 0) or \
            (current_progress is not None and current_progress < 0) or \
            (total_chapters is not None and total_chapters < 0) or \
-           (current_chapter is not None and current_chapters < 0):
+           (current_chapter is not None and current_chapter < 0):
             messagebox.showerror("Input Error", "Counts cannot be negative.")
             return
 
