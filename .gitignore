@@ -1,1 +1,3 @@
 books.json
+book_images/*
+!book_images/Example.jpg

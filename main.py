@@ -8,10 +8,10 @@ class BookTrackerApp:
     def __init__(self, root):
         self.root = root
         # set window title
-        self.root.title('Reading Tracker')
+        self.root.title('BookmarkPy')
 
          # set window size and location
-        self.root.geometry('600x400+50+50')
+        self.root.geometry('660x440+50+50')
 
         # data files
         self.data_file = 'books.json'
@@ -82,8 +82,30 @@ class BookTrackerApp:
         """
         Loads a default placeholder image.
         When a book doesn't have a selected image, or its file can't be found, a placeholder will be displayed.
-        """
-        # TODO
+        """ 
+        try:
+            # Attempt to draw a 'No Image' placeholder image
+            img = Image.new('RGB', (100, 150), color = (200, 200, 200))
+            d = ImageDraw.Draw(img)
+            try:
+                # Try to use Arial font
+                font = ImageFont.truetype("arial.ttf", 15)
+            except IOError:
+                # Fallback to default font if arial.tff is not found
+                font = ImageFont._load_default()
+            # Calculate text position to center it
+            text_width, text_height = d.textbbox((0, 0), "No Image", font=font)[2:]
+            x = (100 - text_width) / 2
+            y = (100 - text_height) / 2
+            d.text((x, y), "No Image", fill=(50, 50, 50), font=font)
+
+            self.no_image_photo = ImageTk.PhotoImage(img) # Convert PIL Image to Tkinter Photoimage
+        except Exception as e:
+            print(f"Error creating 'no image' placeholder: {e}")
+            self.no_image_photo = tk.PhotoImage(width=1, height=1)
+
+
+
     
     def _create_widgets(self):
         """
@@ -95,7 +117,7 @@ class BookTrackerApp:
         style.configure("BookCard.TFrame", background = "#e6e6fa", borderwidth=2, relief="ridge", padding=5)
         style.configure("BookCard.TLabel", background="#e6e6fa")
 
-        # Configure Grif for the Root Window
+        # Configure Grid for the Root Window
         self.root.grid_rowconfigure(0, weight=1) # Allow the single row to expand vertically
         self.root.grid_columnconfigure(0, weight=0) # Button column has fixed width
         self.root.grid_columnconfigure(1, weight=1) # Book list column expands horizontally
@@ -181,9 +203,27 @@ class BookTrackerApp:
 
         # Book image display
         image_label = ttk.Label(book_frame)
-        image_label.grid(row=0, column=3, rowspan=1, padx=10, pady=5, sticky='n') # Spans 3 rows, alligning to the top
+        image_label.grid(row=0, column=0, rowspan=3, padx=10, pady=5, sticky='n') # Spans 3 rows, alligning to the top
 
-        # TODO Load and display images
+        # Load and display images
+        image_path = book.get('image_path', '')
+        if image_path and os.path.exists(image_path):
+            try:
+                img = Image.open(image_path)
+                # Thumbnail resizes image proportionally to fit within 100x150
+                img.thumbnail((100, 150), Image.LANCZOS) # LANCZOS image rescale
+                photo = ImageTk.PhotoImage(img)
+                image_label.config(image=photo)
+                image_label.image = photo # reference to prevent memory from freeing up
+            except Exception as e:
+                print(f"Error loading image {image_path}: {e}")
+                # Fallback to "No Image" if there is an error loading the image at the given path
+                image_label.config(image=self.no_image_photo)
+                image_label.image = self.no_image_photo
+        else:
+            # Display the placeholder image if no path or file doesn't exist
+            image_label.config(image=self.no_image_photo)
+            image_label.image = self.no_image_photo
 
         # Book details (Title, Author, Progress)
         title_label = ttk.Label(book_frame, text=f"Title: {book['title']}", font=('Arial', 12, 'bold'), style="BookCard.TLabel")
@@ -370,10 +410,16 @@ class BookTrackerApp:
         Opens a file dialog to select an image.
         Updates the provided image_path_var with the selected file's full path.
         """
+        # Get path to the 'book_images' folder from the current working directory 
+        current_directory = os.getcwd()
+        book_images_folder = os.path.join(current_directory, 'book_images')
+
         file_path = filedialog.askopenfilename(
             title='Select Book Image',
             # Define allowed image types
-            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp"), ("All Files", "*.*")]
+            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp"), ("All Files", "*.*")],
+            # Open 'book_images' as initial directory
+            initialdir=book_images_folder
         )
         if file_path:
             image_path_var.set(file_path) # Update image_path_var with path
