@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import ttk
-
+from tkinter import ttk, filedialog, messagebox
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import os
 import json
 
@@ -181,7 +181,7 @@ class BookTrackerApp:
 
         # Book image display
         image_label = ttk.Label(book_frame)
-        image_label.grid(row=0, column=3, rowspan=0, padx=10, pady=5, sticky='n') # Spans 3 rows, alligning to the top
+        image_label.grid(row=0, column=3, rowspan=1, padx=10, pady=5, sticky='n') # Spans 3 rows, alligning to the top
 
         # TODO Load and display images
 
@@ -193,10 +193,18 @@ class BookTrackerApp:
         author_label.grid(row=1, column=1, sticky='w', pady=2)
 
         progress_str = self._get_progress_string(book) # Get formatted progress string
-        progress_label = ttk.Label(book_frame, text=f"Progress: {book['progress_str']}", font=('Arial', 10), style="BookCard.TLabel")
+        progress_label = ttk.Label(book_frame, text=f"Progress: {progress_str}", font=('Arial', 10), style="BookCard.TLabel")
         progress_label.grid(row=2, column=1, sticky='w', pady=2)
 
-        # TODO Edit and delete button
+        # Edit and delete buttons
+        button_container = ttk.Frame(book_frame, style="BookCard.TFrame")
+        button_container.grid(row=2, column=2, sticky='se', padx=5, pady=5) # Buttons aligned bottom right
+
+        edit_btn = ttk.Button(button_container, text="Edit", command=lambda b=book, i=index: self._open_edit_book_dialog(b, i))
+        edit_btn.pack(side='left', padx=2) # Buttons packed side by side
+
+        delete_btn = ttk.Button(button_container, text="Delete", command=lambda i=index: self._confirm_delete_book(i))
+        delete_btn.pack(side='left', padx=2)
 
     def _get_progress_string(self, book):
         """
@@ -206,7 +214,7 @@ class BookTrackerApp:
         Returns:
             str: The formatted progress string.
         """
-        if book['track chapters']:
+        if book['track_chapters']:
             total_units = book['total_chapters']
             current_units = book['current_chapter']
             unit_name = "chapters"
@@ -223,7 +231,7 @@ class BookTrackerApp:
 
         # Calculate percentage
         if total_units > 0:
-            percentage = (current_units / total_units)
+            percentage = (current_units / total_units) * 100
         else:
             percentage = 0
         return f"{current_units}/{total_units} ({percentage:.0f}%) {unit_name}"
@@ -285,7 +293,211 @@ class BookTrackerApp:
         author_entry = ttk.Entry(dialog_frame, width=40, font=('Arial', 10))
         author_entry.grid(row=1, column=1, sticky='ew', pady=2, padx=5)
 
-        #TODO
+        # Image Selection
+        image_path_var = tk.StringVar() # StringVar to hold the selected image file path
+        # Display the image path with wraplength to handle long paths
+        image_path_label = ttk.Label(dialog_frame, textvariable=image_path_var, font=('Arial', 9), wraplength=250)
+        image_path_label.grid(row=2, column=1, sticky='ew', pady=2, padx=5)
+        # Button to open file dialog for image selection
+        ttk.Button(dialog_frame, text='Select Image', command=lambda: self._select_image_file(image_path_var)).grid(row=2, column=0, sticky='w', pady=2)
+
+        # Progress tracking toggle
+        track_chapters_var = tk.BooleanVar() # Track the state of the checkbox
+        track_chapters_checkbox = ttk.Checkbutton(dialog_frame, text="Track by chapters instead of pages", variable=track_chapters_var)
+        track_chapters_checkbox.grid(row=3, column=0, columnspan=2, sticky='w', pady=5)
+
+        # Input fields for page tracking (visability managed by _toggle_chapter_inputs)
+        total_pages_label = ttk.Label(dialog_frame, text="Total Pages:", font=('Arial', 10))
+        total_pages_entry = ttk.Entry(dialog_frame, width=20, font=("Arial", 10))
+        current_progress_label = ttk.Label(dialog_frame, text="Current Page:", font=("Arial", 10))
+        current_progress_entry = ttk.Entry(dialog_frame, width=20, font=("Arial", 10))
+
+        # Input fields for chapter tracking (visability managed by _toggle_chapter_inputs)
+        total_chapters_label = ttk.Label(dialog_frame, text="Total Chapters:", font=("Arial", 10))
+        total_chapters_entry = ttk.Entry(dialog_frame, width=20, font=("Arial", 10))
+        current_chapter_label = ttk.Label(dialog_frame, text="Current Chapter:", font=("Arial", 10))
+        current_chapter_entry = ttk.Entry(dialog_frame, width=20, font=("Arial", 10))
+
+        # Configure the command for the toggle checkbox. It calls _toggle_chapter_inputs
+        track_chapters_checkbox.config(command=lambda: self._toggle_chapter_inputs(
+            track_chapters_var.get(),
+            total_pages_label, total_pages_entry, current_progress_label, current_progress_entry,
+            total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry
+        ))
+
+        # Populate fields if in edit mode
+        if is_edit and book_data:
+            title_entry.insert(0, book_data['title'])
+            author_entry.insert(0, book_data['author'])
+            image_path_var.set(book_data.get('image_path', ''))
+            track_chapters_var.set(book_data['track_chapters'])
+
+            # Populate chapter/page fields and handle None values
+            if book_data['track_chapters']:
+                total_chapters_entry.insert(0, str(book_data['total_chapters']) if book_data['total_chapters'] is not None else "")
+                current_chapter_entry.insert(0, str(['current_chapter']) if book_data['current_chapter'] is not None else "")
+            else:
+                total_pages_entry.insert(0, str(book_data['total_pages']) if book_data['total_pages'] is not None else "")
+                current_progress_entry.insert(0, str(['current_progress']) if book_data['current_progress'] is not None else "")
+        
+        # Initial call to _toggle_chapter_inputs. Sets visibility of page/chapter inputs.
+        self._toggle_chapter_inputs(
+            track_chapters_var.get(),
+            total_pages_label, total_pages_entry, current_progress_label, current_progress_entry,
+            total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry
+        )
+
+        # Save and cancel buttons
+        button_frame = ttk.Frame(dialog_frame)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=10) # Positioned after input fields
+
+        # Define the command for the save Button
+        save_command = lambda: self._save_book_data(
+            dialog, is_edit, index,
+            title_entry.get(), author_entry.get(), image_path_var.get(),
+            track_chapters_var.get(),
+            total_pages_entry.get(), current_progress_entry.get(),
+            total_chapters_entry.get(), current_chapter_entry.get()
+        )
+        ttk.Button(button_frame, text="Save", command=save_command).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side='left', padx=5)
+
+        # Make the second column of the dialog_frame expandable
+        dialog_frame.grid_columnconfigure(1, weight=1)
+    
+    def _select_image_file(self, image_path_var):
+        """
+        Opens a file dialog to select an image.
+        Updates the provided image_path_var with the selected file's full path.
+        """
+        file_path = filedialog.askopenfilename(
+            title='Select Book Image',
+            # Define allowed image types
+            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp"), ("All Files", "*.*")]
+        )
+        if file_path:
+            image_path_var.set(file_path) # Update image_path_var with path
+
+    def _toggle_chapter_inputs(self, track_chapters, total_pages_label, total_pages_entry, current_progress_label, current_progress_entry, total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry):
+        """
+        Manages the visibility of either page or chapter input fields in the
+        Add/Edit book dialog based on the 'track_chapters' boolean.
+        It hides one set of inputs and shows the other.
+        """
+        # Define the common grid parameters of the input labels and entries
+        label_grid_params = {'column': 0, 'sticky': 'w', 'pady': 2}
+        entry_grid_params = {'column': 1, 'sticky': 'ew', 'pady': 2, 'padx': 5}
+
+        # Clear existing text in all entries before toggling, preventing old values from reappearing when the checkbox is toggled.
+        total_pages_entry.delete(0, tk.END)
+        current_progress_entry.delete(0, tk.END)
+        total_chapters_entry.delete(0, tk.END)
+        current_chapter_entry.delete(0, tk.END)
+
+        if track_chapters:
+            # Hide page inputs
+            total_pages_label.grid_forget() # Remove from grid layout
+            total_chapters_entry.grid_forget()
+            current_progress_label.grid_forget()
+            current_progress_entry.grid_forget()
+
+            # Show chapter inputs
+            total_chapters_label.grid(row=4, **label_grid_params) # Unpack dictionary, add to grid layout
+            total_chapters_entry.grid(row=4, **entry_grid_params)
+            current_chapter_label.grid(row=5, **label_grid_params)
+            current_chapter_entry.grid(row=5, **entry_grid_params)
+        else:
+            # Show page inputs
+            total_pages_label.grid(row=4, **label_grid_params)
+            total_pages_entry.grid(row=4, **entry_grid_params)
+            current_progress_label.grid(row=5, **label_grid_params)
+            current_progress_entry.grid(row=5, **entry_grid_params)
+
+            # Hide chapter inputs
+            total_chapters_label.grid_forget()
+            total_chapters_entry.grid_forget()
+            current_chapter_label.grid_forget()
+            current_chapter_entry.grid_forget()
+
+    
+    def _save_book_data(self, dialog, is_edit, index, title, author, image_path, track_chapters, total_pages_str, current_progress_str, total_chapters_str, current_chapter_str):
+        """
+        Saves or updates book data based on the inputs from the Add/Edit Book dialog.
+        Validates input values.
+        Args:
+            dialog (tk.Toplevel): The dialog window to destroy after saving
+            is_edit (bool): True when updating an existing book, False when adding a neew book.
+            index (int): The list index of the book in edit mode.
+            title (str), author(str), image_path(str): basic book details
+            track_chapters (bool): True when tracking progress by chapters, False when tracking progress by pages.
+            total_pages_str (str), current_progress_str (str): String values of page counts.
+            total_chapters_str (str), current_chapter (str): String values of chapter counts.
+        """
+        # Validate required fields (title and author)
+        if not title.strip() or not author.strip(): # Removing leading and trailing whitespace
+            messagebox.showerror("Input Error", "Title and Author cannot be empty.")
+            return
+        
+        # Initialize numeric progress variables to None. Populate if valid.
+        total_pages = None
+        current_progress = None
+        total_chapters = None
+        current_chapter = None
+
+        try:
+            if not track_chapters: # Processing for page tracking
+                if total_pages_str.strip(): # Only precess when string isn't empty
+                    total_pages = int(total_pages_str)
+                if current_progress_str.strip():
+                    current_progress = int(current_progress_str)
+            else: # Procesing for chapter tracking
+                if total_chapters_str.strip():
+                    total_chapters = int(total_chapters_str)
+                if current_chapter_str.strip():
+                    current_chapter = int(current_chapter_str)
+        except ValueError:
+            messagebox.showerror("Input Error", "Page/Chapter counts must be valid numbers (or left empty).")
+            return
+
+        # Validate that counts are not negative
+        if (total_pages is not None and total_pages < 0) or \
+           (current_progress is not None and current_progress < 0) or \
+           (total_chapters is not None and total_chapters < 0) or \
+           (current_chapter is not None and current_chapters < 0):
+            messagebox.showerror("Input Error", "Counts cannot be negative.")
+            return
+
+        # Validate current progress against total count, ensuring current <= total
+        if not track_chapters:
+            if current_progress is not None and total_pages is not None and current_progress > total_pages:
+                messagebox.showerror("Input Error", "Current page cannot exceed total pages.")
+                return
+        else:
+            if current_chapter is not None and total_chapters is not None and current_chapter > total_chapters:
+                messagebox.showerror("Inpur Error", "Current chapter cannot exceed total chapters.")
+                return
+        
+        # COnstruct the book data entry
+        book_data = {
+            'title': title.strip(),
+            'author': author.strip(),
+            'image_path': image_path,
+            'track_chapters': track_chapters,
+            'total_pages': total_pages,
+            'current_progress': current_progress,
+            'total_chapters': total_chapters,
+            'current_chapter': current_chapter
+        }
+
+        if is_edit:
+            self.books[index] = book_data # Update existing book entry
+        else:
+            self.books.append(book_data) # Add new book entry
+        
+        dialog.destroy() # Close dialog window
+        self._save_books() # Save updated data to file
+        self._refresh_book_display() # Refresh display for changes
+
 
     def _confirm_delete_book(self, index):
         """
