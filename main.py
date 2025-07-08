@@ -3,6 +3,8 @@ from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 import os
 import json
+import requests
+import threading
 
 class BookTrackerApp:
     def __init__(self, root):
@@ -130,6 +132,10 @@ class BookTrackerApp:
         # Add Book Button within the button frame
         add_book_btn = ttk.Button(self.button_frame, text="Add Book", command=self._open_add_book_dialog)
         add_book_btn.pack(pady=10,padx=5, fill='x') # Pack button within padding and expand horizontaly
+
+        # Add from ISBN button
+        add_isbn_btn = ttk.Button(self.button_frame, text="Add from ISBN", command=self._open_isbn_dialog)
+        add_isbn_btn.pack(pady=5, padx=5, fill='x') # Pack below 'Add Book'
 
         # Right Column: Book List Container
         self.books_list_container = ttk.Frame(self.root, relief=tk.GROOVE, borderwidth=1)
@@ -292,11 +298,14 @@ class BookTrackerApp:
         }
         self.books.append(new_book)
     
-    def _open_add_book_dialog(self):
+    def _open_add_book_dialog(self, initial_title="", initial_author=""):
         """
         Opens the dialog for adding a new book.
+        Args:
+            initial_title (str): Pre-fill for the title field.
+            initial_author (str): Pre-fill for the author field.
         """
-        self._open_book_dialog(is_edit=False)
+        self._open_book_dialog(is_edit=False, initial_title=initial_title, initial_author=initial_author)
 
     def _open_edit_book_dialog(self, book_data, index):
         """
@@ -307,13 +316,15 @@ class BookTrackerApp:
         """
         self._open_book_dialog(is_edit=True, book_data=book_data, index=index)
     
-    def _open_book_dialog(self, is_edit, book_data=None, index=None):
+    def _open_book_dialog(self, is_edit, book_data=None, index=None, initial_title="", initial_author=""):
         """
         Function to create and manage the Add/Edit Book dialog window.
         Args:
             is_edit (bool): True if the window is for editing, False for adding.
             book_data (dict): The data of a book to pre-fill if in edit mode.
             index (int): The list index of the book in edit mode.
+            initial_title (str): Pre-fill for the title field.
+            initial_author (str): Pre-fill for the author field.
         """
         dialog = tk.Toplevel(self.root) # creates new top level window
         dialog.title("Add New Book" if not is_edit else "Edit Book") # set window title
@@ -372,6 +383,13 @@ class BookTrackerApp:
             image_path_var.set(book_data.get('image_path', ''))
             track_chapters_var.set(book_data['track_chapters'])
 
+            # Initial call to _toggle_chapter_inputs. Sets visibility of page/chapter inputs.
+            self._toggle_chapter_inputs(
+                track_chapters_var.get(),
+                total_pages_label, total_pages_entry, current_progress_label, current_progress_entry,
+                total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry
+            )
+
             # Populate chapter/page fields and handle None values
             if book_data['track_chapters']:
                 total_chapters_entry.insert(0, str(book_data['total_chapters']) if book_data['total_chapters'] is not None else "")
@@ -379,13 +397,23 @@ class BookTrackerApp:
             else:
                 total_pages_entry.insert(0, str(book_data['total_pages']) if book_data['total_pages'] is not None else "")
                 current_progress_entry.insert(0, str(book_data['current_progress']) if book_data['current_progress'] is not None else "")
-        
-        # Initial call to _toggle_chapter_inputs. Sets visibility of page/chapter inputs.
-        self._toggle_chapter_inputs(
-            track_chapters_var.get(),
-            total_pages_label, total_pages_entry, current_progress_label, current_progress_entry,
-            total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry
-        )
+        elif initial_title or initial_author: # Fill title and/or author fields with initial data from ISBN search
+            title_entry.insert(0, initial_title)
+            author_entry.insert(0, initial_author)
+            # For new books, default to page tracking and show these fields
+            track_chapters_var.set(False)
+            self._toggle_chapter_inputs(
+                False,
+                total_pages_label, total_pages_entry, current_progress_label, current_progress_entry,
+                total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry
+            )
+        else:
+            track_chapters_var.set(False)
+            self._toggle_chapter_inputs(
+                False,
+                total_pages_label, total_pages_entry, current_progress_label, current_progress_entry,
+                total_chapters_label, total_chapters_entry, current_chapter_label, current_chapter_entry
+            )  
 
         # Save and cancel buttons
         button_frame = ttk.Frame(dialog_frame)
@@ -562,6 +590,146 @@ class BookTrackerApp:
         del self.books[index] # Removes the book from the list
         self._save_books() # Update the data for the file
         self._refresh_book_display() # Update the UI to reflect the deletion
+    
+    def _open_isbn_dialog(self):
+        """
+        Opens a dialog for entering an ISBN (either 10 or 13).
+        """
+        isbn_dialog = tk.Toplevel(self.root)
+        isbn_dialog.title("Add Book by ISBN")
+        isbn_dialog.transient(self.root)
+        isbn_dialog.grab_set()
+        isbn_dialog.resizable(False, False)
+
+        dialog_frame = ttk.Frame(isbn_dialog, padding="15")
+        dialog_frame.pack(fill='both', expand=True)
+
+        ttk.Label(dialog_frame, text="Enter ISBN (10 and 13 digits):", font=('Arial', 10)).grid(row=0, column=0, sticky='w', pady=5)
+        isbn_entry = ttk.Entry(dialog_frame, width=30, font=('Arial', 10))
+        isbn_entry.grid(row=0, column=1, sticky='ew', pady=5, padx=5)
+
+        status_label = ttk.Label(dialog_frame, text="", font=('Arial', 9, 'italic'), foreground='blue')
+        status_label.grid(row=1, column=0, columnspan=2, pady=5)
+
+        def search_command():
+            isbn = isbn_entry.get().strip()
+            self._search_book_by_isbn(isbn, isbn_dialog, status_label)
+        
+        button_frame = ttk.Frame(dialog_frame)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+
+        ttk.Button(button_frame, text="Search", command=search_command).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Search", command=isbn_dialog.destroy).pack(side='left', padx=5)
+
+        dialog_frame.grid_columnconfigure(1, weight=1) # Make ISBN entry expandable
+
+    def _search_book_by_isbn(self, isbn, isbn_dialog, status_label):
+        """
+        Initiates the book search by ISBN in a separate thread, keeping the UI responsive.
+        Args:
+            isbn (str): The ISBN entered by the user.
+            isbn_dialog (tk.Toplevel): The ISBN dialog window.
+            status_label (ttk.Label): The label to update with status messages.
+        """
+        if not isbn.isdigit() or (len(isbn) != 10 and len(isbn) != 13):
+            status_label.config(text="Invalid ISBN. Please enter 10 or 13 digits.", foreground='red')
+            return
+        
+        status_label.config(text="Searching Open Library...", foreground='blue')
+        # Start a new thread for the API call
+        thread = threading.Thread(target=self._fetch_book_data_thread, args=(isbn, isbn_dialog, status_label))
+        thread.daemon = True # Allow the main program to exit even if this thread is running
+        thread.start()
+
+    def _fetch_book_data_thread(self, isbn, isbn_dialog, status_label):
+        """
+        Fetches book data from Open Libray API in a separate thread.
+        Args:
+            isbn (str): The ISBN to search for.
+            isbn_dialog (tk.Toplevel): The ISBN dialog window.
+            status_label (ttk.Label): The label to update with status messages.
+        """
+        try:
+            url = f"https://openlibrary.org/isbn/{isbn}.json"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status() # Raise HTTPError for bad responses
+            edition_data = response.json()
+
+            book_info = None
+            title = edition_data.get('title', 'Unknown Title')
+
+            # Extract works key and data
+            work_key = None
+            works_list = edition_data.get('works')
+            if works_list:
+                # Assuming the first work in the list is the primary one
+                work_key = works_list[0].get('key')
+
+            authors_data = []
+            if work_key:
+                work_url = f"https://openlibrary.org{work_key}.json"
+                work_response = requests.get(work_url, timeout = 10)
+                work_response.raise_for_status()
+                work_data = work_response.json()
+                authors_data = work_data.get('authors', [])
+            else:
+                # If no key found, try to get authors from edition_data
+                authors_data = edition_data.get('authors', [])
+
+            author_names = []
+            for author_entry in authors_data:
+                author_key = author_entry.get('author', {}).get('key')
+                if not author_key:
+                    author_key = author_entry.get('key')
+                if author_key:
+                    try:
+                        author_url = f"https://openlibrary.org{author_key}.json"
+                        author_response = requests.get(author_url, timeout=5)
+                        author_response.raise_for_status()
+                        author_data = author_response.json()
+                        author_name = author_data.get('name', 'Unknown Author')
+                        author_names.append(author_name)
+                    except requests.exceptions.RequestException as e:
+                        print(f"Error fetching author data for {author_key}: {e}")
+                        author_names.append("Unknown Author") # 'Unknown Author' for failed author lookup
+                    except json.JSONDecodeError:
+                        print(f"Could not parse author API response for {author_key}")
+                        author_names.append("Unknown Author")
+                else:
+                    # No key present
+                    author_names.append("Unknown Author")
+
+            final_author_string = ", ".join(author_names) if author_names else "Unknown Author"
+
+            book_info = None
+            if title != 'Unknown Title' or final_author_string != 'Unknown Author':
+                book_info = {'title': title, 'author': final_author_string}
+
+            # Schedule the result processing on the main Tkinter thread
+            self.root.after(0, self._process_isbn_results, book_info, isbn_dialog, status_label)
+        
+        except requests.exceptions.Timeout:
+            self.root.after(0, status_label.config, {"text": "API request times out.", "foreground": "red"})
+        except requests.exceptions.RequestException as e:
+            self.root.after(0, status_label.config, {"text": f"Network Error: {e}", "foreground": "red"})
+        except json.JSONDecodeError:
+            self.root.after(0, status_label.config, {"text": "Could not parse API response (invalid JSON).", "foreground": "red"})
+        except Exception as e:
+            self.root.after(0, status_label.config, {"text": f"An unexpected error occured: {e}", "foreground": "red"})
+    
+    def _process_isbn_results(self, book_info, isbn_dialog, status_label):
+        """
+        Processes the results of the ISBN search on the main Tkinter thread.
+        Args:
+            book_info (dict or None): Dictionary containing 'title' and 'author' if found, otherwise None.
+            isbn_dialog (tk.Toplevel): The ISBN dialog window.
+            status_label (ttk.Label): The label to update with status messages.
+        """
+        if book_info:
+            isbn_dialog.destroy()
+            self._open_add_book_dialog(initial_title=book_info['title'], initial_author=book_info['author'])
+        else:
+            status_label.config(text="Book not found for this ISBN.", foreground='red')
 
 if __name__ == "__main__":
     root = tk.Tk()
