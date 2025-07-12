@@ -15,28 +15,32 @@ class BookTrackerApp:
          # set window size and location
         self.root.geometry('660x440+50+50')
 
+        # themes
+        self.current_theme = 'light'
+        self._define_themes()
+
         # data files
         self.data_file = 'books.json'
         self.books = []
 
         # load existing books
-        self._load_books() # attempt to load books on startup
+        self._load_data() # attempt to load books on startup
 
         # load icon Windows
         try:
             self.root.iconbitmap('./assets/book.ico')
         except tk.TclError:
             print ("Windows icon file not found")
-        # load icon Linux/MacOS
+        # load icon Linux
         try:
             photo = tk.PhotoImage(file='./assets/book_icon.png')
             self.root.iconphoto(False, photo)
         except tk.TclError:
-            print("Linux/MacOS icon file not found")
+            print("Linux icon file not found")
 
         self._load_default_images() # pre-load book image placeholder
         self._create_widgets() # build main app UI
-        self._refresh_book_display() # refresh the book list display
+        self._apply_theme() # apply initial theme and refresh the book list display
 
         # bind window close function to save function
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
@@ -46,39 +50,147 @@ class BookTrackerApp:
         Handles window closing.
         Saves current book data to file before destroying the window.
         """
-        self._save_books()
+        self._save_data()
         self.root.destroy() # Close Tkinter application properly
 
-    def _load_books(self):
+    def _load_data(self):
         """
-        Loads book data from the JSON file.
+        Loads book data and theme selection from the JSON file.
         If the file doesn't exist or is invalid, an empty list is initialized.
         """
         if os.path.exists(self.data_file):
             try:
                 with open(self.data_file, 'r', encoding='utf-8') as f:
-                    self.books = json.load(f)
-                print(f"Loaded {len(self.books)} books from {self.data_file}")
+                    data = json.load(f)
+                    self.books = data.get('books', [])
+                    self.current_theme = data.get('theme', 'light')
+                print(f"Loaded {len(self.books)} books and theme '{self.current_theme}' from {self.data_file}")
             except json.JSONDecodeError as e:
-                print(f"Error decoding JSON from {self.data_file}: {e}. Starting with empty book list.")
+                print(f"Error decoding JSON from {self.data_file}: {e}. Starting with empty book list and default theme.")
                 self.books = [] # Reset if file is corrupted
+                self.current_theme = 'light'
             except Exception as e:
-                print(f"An unexpected error occurred while loading books: {e}. Starting with empty book list")
+                print(f"An unexpected error occurred while loading books: {e}. Starting with empty book list and default theme.")
                 self.books = []
+                self.current_theme = 'light'
         else:
-            print(f"no data file found at {self.data_file}. Starting with an empty book list.")
+            print(f"no data file found at {self.data_file}. Starting with an empty book list and default theme.")
             self.books = [] # Initialize empty list if file doesn't exist
+            self.current_theme = 'light'
 
-    def _save_books(self):
+    def _save_data(self):
         """
-        Saves current book data to the JSON file.
+        Saves current book data and theme selection to the JSON file.
         """
         try:
+            data_to_save = {
+                'books': self.books,
+                'theme': self.current_theme
+            }
             with open(self.data_file, 'w', encoding='utf-8') as f:
-                json.dump(self.books, f, indent=4)
-            print(f"Saved {len(self.books)} books to {self.data_file}")
+                json.dump(data_to_save, f, indent=4)
+            print(f"Saved {len(self.books)} books and theme '{self.current_theme}' to {self.data_file}")
         except Exception as e:
                 print(f"Error saving books to {self.data_file}: {e}")
+
+    def _define_themes(self):
+        """
+        Defines the color palettes for light and dark themes.
+        """
+        self.themes = {
+            'light': {
+                'root_bg': '#f0f0f0',
+                'frame_bg': '#e6e6fa',
+                'label_bg': '#e6e6fa',
+                'text_color': '#333333',
+                'canvas_bg': 'white',
+                'button_bg': '#d3d3d3',
+                'button_fg': '#333333',
+                'entry_bg': 'white',
+                'entry_fg': '#333333',
+                'dialog_bg': '#f0f0f0',
+                'dialog_frame_bg': '#f0f0f0'
+            },
+            'dark': {
+                'root_bg': '#2e2e2e',
+                'frame_bg': '#3c3c3c',
+                'label_bg': '#3c3c3c',
+                'text_color': '#f0f0f0',
+                'canvas_bg': '#1e1e1e',
+                'button_bg': '#555555',
+                'button_fg': '#f0f0f0',
+                'entry_bg': '#444444',
+                'entry_fg': '#f0f0f0',
+                'dialog_bg': '#2e2e2e',
+                'dialog_frame_bg': '#2e2e2e'
+            }
+        }
+    
+    def _apply_theme(self):
+        """
+        Applies the current theme to all relevant widgets.
+        """
+        theme_colors = self.themes[self.current_theme]
+        style = ttk.Style()
+
+        # 'clam' style allows button backgrounds to be colored fully.
+        style.theme_use('clam')
+
+        # Root window background
+        self.root.config(bg=theme_colors['root_bg'])
+
+        # Main frames and canvas
+        style.configure("Themed.TFrame", background=theme_colors['root_bg'])
+        style.configure("CanvasFrame.TFrame", background=theme_colors['canvas_bg'])
+
+        # Configure custom ttk styles for book entries
+        style.configure("BookCard.TFrame", background=theme_colors['frame_bg'],
+            foreground=theme_colors['text_color'], borderwidth=2, relief="ridge", padding=5)
+        style.configure("BookCard.TLabel", background=theme_colors['label_bg'],
+            foreground=theme_colors['text_color'])
+
+        # Configure general ttk styles for buttons, labels, entries, checkbuttons
+        style.configure("TFrame", background=theme_colors['root_bg'])
+        style.configure("TLabel", background=theme_colors['root_bg'], foreground=theme_colors['text_color'])
+        style.configure("Themed.TButton",
+            background=theme_colors['button_bg'],
+            foreground=theme_colors['button_fg'],
+            bordercolor=theme_colors['button_bg'],
+            lightcolor=theme_colors['button_bg'],
+            darkcolor=theme_colors['button_bg'],
+            relief='flat',
+            focusthickness=0,
+            padding=5
+            )
+        # Make sure theme applies when hovering over
+        style.map("Themed.TButton",
+            background=[('active', theme_colors['button_bg'])],
+            foreground=[('active', theme_colors['button_fg'])])
+
+        style.configure("TEntry", fieldbackground=theme_colors['entry_bg'], foreground=theme_colors['entry_fg'])
+        style.configure("Themed.TCheckbutton", background=theme_colors['root_bg'],
+         foreground=theme_colors['text_color'],
+         focusthickness=0,
+         relief='flat')
+         # Make sure theme applies when hovering over
+        style.map("Themed.TCheckbutton", 
+            background=[('active', theme_colors['root_bg'])],
+            foreground=[('active', theme_colors['text_color'])])
+
+        self.book_canvas.config(bg=theme_colors['canvas_bg'])
+        
+        # Re-apply theme to existing book entries
+        self._refresh_book_display()
+    
+    def _toggle_theme(self):
+        """
+        Switches between light and dark themes.
+        """
+        if self.current_theme == 'light':
+            self.current_theme = 'dark'
+        else:
+            self.current_theme = 'light'
+        self._apply_theme()
 
     def _load_default_images(self):
         """
@@ -86,20 +198,35 @@ class BookTrackerApp:
         When a book doesn't have a selected image, or its file can't be found, a placeholder will be displayed.
         """ 
         try:
+            """if os.path.exists('./assets/no_image.png'): # Attempt to load pre-existing 'no_image.png' from assets folder
+                img = Image.open('./assets/no_image.png')
+            else:"""
             # Attempt to draw a 'No Image' placeholder image
             img = Image.new('RGB', (100, 150), color = (200, 200, 200))
             d = ImageDraw.Draw(img)
-            try:
-                # Try to use Arial font
-                font = ImageFont.truetype("arial.ttf", 15)
-            except IOError:
-                # Fallback to default font if arial.tff is not found
-                font = ImageFont._load_default()
-            # Calculate text position to center it
-            text_width, text_height = d.textbbox((0, 0), "No Image", font=font)[2:]
-            x = (100 - text_width) / 2
-            y = (100 - text_height) / 2
-            d.text((x, y), "No Image", fill=(50, 50, 50), font=font)
+
+            font = None
+            common_fonts = ["arial.ttf", "DejaVuSans.ttf", "FreeSans.ttf"]
+            for font_name in common_fonts:
+                try:
+                    font = ImageFont.truetype(font_name, 15)
+                    break # Found a font
+                except IOError:
+                    pass # Try next font
+            
+            if font is None:
+                try:
+                    # Fallback to default font if no truetype font is found
+                    font = ImageFont._load_default()
+                except Exception as e:
+                    print(f"Warning: Could not load any font for 'No Image' placeholder: {e}")
+                    
+            if font: # Only draw text if a font is loaded
+                # Calculate text position to center it
+                text_width, text_height = d.textbbox((0, 0), "No Image", font=font)[2:]
+                x = (100 - text_width) / 2
+                y = (100 - text_height) / 2
+                d.text((x, y), "No Image", fill=(50, 50, 50), font=font)
 
             self.no_image_photo = ImageTk.PhotoImage(img) # Convert PIL Image to Tkinter Photoimage
         except Exception as e:
@@ -115,9 +242,10 @@ class BookTrackerApp:
         """
         # Configure a custom style for the book entry frames
         style = ttk.Style()
-        # Define a 'BookCard.TFrame' style for book entries and ensure lebels have the same background
-        style.configure("BookCard.TFrame", background = "#e6e6fa", borderwidth=2, relief="ridge", padding=5)
-        style.configure("BookCard.TLabel", background="#e6e6fa")
+        # Define a generic style for frames configured by theme
+        style.configure("Themed.TFrame", background=self.themes[self.current_theme]['root_bg'])
+        # Style for frame inside canvas
+        style.configure("CanvasFrame.TFrame", background=self.themes[self.current_theme]['canvas_bg'])
 
         # Configure Grid for the Root Window
         self.root.grid_rowconfigure(0, weight=1) # Allow the single row to expand vertically
@@ -125,26 +253,30 @@ class BookTrackerApp:
         self.root.grid_columnconfigure(1, weight=1) # Book list column expands horizontally
 
         # Left Column: Button Frame
-        self.button_frame = ttk.Frame(self.root, width=150, relief=tk.RAISED, borderwidth=1)
+        self.button_frame = ttk.Frame(self.root, width=150, relief=tk.RAISED, borderwidth=1, style="Themed.TFrame")
         self.button_frame.grid(row=0, column=0, sticky='ns', padx=5,pady=5) #'ns' - north-south
         self.button_frame.grid_propagate(False) # Prevent frame from resizing itself to fit contents
 
         # Add Book Button within the button frame
-        add_book_btn = ttk.Button(self.button_frame, text="Add Book", command=self._open_add_book_dialog)
+        add_book_btn = ttk.Button(self.button_frame, text="Add Book", command=self._open_add_book_dialog, style="Themed.TButton")
         add_book_btn.pack(pady=10,padx=5, fill='x') # Pack button within padding and expand horizontaly
 
         # Add from ISBN button
-        add_isbn_btn = ttk.Button(self.button_frame, text="Add from ISBN", command=self._open_isbn_dialog)
+        add_isbn_btn = ttk.Button(self.button_frame, text="Add from ISBN", command=self._open_isbn_dialog, style="Themed.TButton")
         add_isbn_btn.pack(pady=5, padx=5, fill='x') # Pack below 'Add Book'
 
+        # Light/Dark mode toggle button
+        theme_toggle_btn = ttk.Button(self.button_frame, text="Light/Dark Mode", command=self._toggle_theme, style="Themed.TButton")
+        theme_toggle_btn.pack(pady=5, padx=5, fill='x')
+
         # Right Column: Book List Container
-        self.books_list_container = ttk.Frame(self.root, relief=tk.GROOVE, borderwidth=1)
+        self.books_list_container = ttk.Frame(self.root, relief=tk.GROOVE, borderwidth=1, style="Themed.TFrame")
         self.books_list_container.grid(row=0, column=1, sticky='nsew', padx=5, pady=5) # 'nsew' fills all directions
         self.books_list_container.grid_rowconfigure(0, weight=1) # Allow the canvas row to expand
         self.books_list_container.grid_columnconfigure(0, weight=1) # Allow the canvas column to expand
 
         # Canvas for scrollable content
-        self.book_canvas = tk.Canvas(self.books_list_container, bg='white')
+        self.book_canvas = tk.Canvas(self.books_list_container, bg=self.themes[self.current_theme]['canvas_bg'])
         self.book_canvas.grid(row=0, column=0, sticky='nsew')
 
         # Vertical Scrollbar for the canvas
@@ -154,7 +286,7 @@ class BookTrackerApp:
 
         # Create a frame inside the canvas to hold all individual book entries
         # The canvas will draw this frame as a scrollable window
-        self.book_list_frame = ttk.Frame(self.book_canvas)
+        self.book_list_frame = ttk.Frame(self.book_canvas, style="CanvasFrame.TFrame")
         self.book_canvas.create_window((0,0), window=self.book_list_frame, anchor='nw') #anchor top left
 
         # Bind events to update the canvas scroll region and the inner frame's width, ensuring proper scrolling and that entries fill width
@@ -246,10 +378,10 @@ class BookTrackerApp:
         button_container = ttk.Frame(book_frame, style="BookCard.TFrame")
         button_container.grid(row=2, column=2, sticky='se', padx=5, pady=5) # Buttons aligned bottom right
 
-        edit_btn = ttk.Button(button_container, text="Edit", command=lambda b=book, i=index: self._open_edit_book_dialog(b, i))
+        edit_btn = ttk.Button(button_container, text="Edit", command=lambda b=book, i=index: self._open_edit_book_dialog(b, i), style="Themed.TButton")
         edit_btn.pack(side='left', padx=2) # Buttons packed side by side
 
-        delete_btn = ttk.Button(button_container, text="Delete", command=lambda i=index: self._confirm_delete_book(i))
+        delete_btn = ttk.Button(button_container, text="Delete", command=lambda i=index: self._confirm_delete_book(i), style="Themed.TButton")
         delete_btn.pack(side='left', padx=2)
 
     def _get_progress_string(self, book):
@@ -332,7 +464,10 @@ class BookTrackerApp:
         dialog.grab_set() # Make the dialog modal, preventing interaction with main window
         dialog.resizable(False, False) # Prevent window resizing
 
-        dialog_frame = ttk.Frame(dialog, padding="15")
+        # Apply theme to dialog background
+        dialog.config(bg=self.themes[self.current_theme]['dialog_bg'])
+
+        dialog_frame = ttk.Frame(dialog, padding="15", style="Themed.TFrame")
         dialog_frame.pack(fill='both', expand=True)
 
         # Title and Author input fields
@@ -350,11 +485,11 @@ class BookTrackerApp:
         image_path_label = ttk.Label(dialog_frame, textvariable=image_path_var, font=('Arial', 9), wraplength=250)
         image_path_label.grid(row=2, column=1, sticky='ew', pady=2, padx=5)
         # Button to open file dialog for image selection
-        ttk.Button(dialog_frame, text='Select Image', command=lambda: self._select_image_file(image_path_var)).grid(row=2, column=0, sticky='w', pady=2)
+        ttk.Button(dialog_frame, text='Select Image', command=lambda: self._select_image_file(image_path_var), style="Themed.TButton").grid(row=2, column=0, sticky='w', pady=2)
 
         # Progress tracking toggle
         track_chapters_var = tk.BooleanVar() # Track the state of the checkbox
-        track_chapters_checkbox = ttk.Checkbutton(dialog_frame, text="Track by chapters instead of pages", variable=track_chapters_var)
+        track_chapters_checkbox = ttk.Checkbutton(dialog_frame, text="Track by chapters instead of pages", variable=track_chapters_var, style="Themed.TCheckbutton")
         track_chapters_checkbox.grid(row=3, column=0, columnspan=2, sticky='w', pady=5)
 
         # Input fields for page tracking (visability managed by _toggle_chapter_inputs)
@@ -416,7 +551,7 @@ class BookTrackerApp:
             )  
 
         # Save and cancel buttons
-        button_frame = ttk.Frame(dialog_frame)
+        button_frame = ttk.Frame(dialog_frame, style="Themed.TFrame")
         button_frame.grid(row=6, column=0, columnspan=2, pady=10) # Positioned after input fields
 
         # Define the command for the save Button
@@ -427,8 +562,8 @@ class BookTrackerApp:
             total_pages_entry.get(), current_progress_entry.get(),
             total_chapters_entry.get(), current_chapter_entry.get()
         )
-        ttk.Button(button_frame, text="Save", command=save_command).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Save", command=save_command, style="Themed.TButton").pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy, style="Themed.TButton").pack(side='left', padx=5)
 
         # Make the second column of the dialog_frame expandable
         dialog_frame.grid_columnconfigure(1, weight=1)
@@ -563,7 +698,7 @@ class BookTrackerApp:
             self.books.append(book_data) # Add new book entry
         
         dialog.destroy() # Close dialog window
-        self._save_books() # Save updated data to file
+        self._save_data() # Save updated data to file
         self._refresh_book_display() # Refresh display for changes
 
 
@@ -588,7 +723,7 @@ class BookTrackerApp:
             index (int): The index of the book to be deleted
         """
         del self.books[index] # Removes the book from the list
-        self._save_books() # Update the data for the file
+        self._save_data() # Update the data for the file
         self._refresh_book_display() # Update the UI to reflect the deletion
     
     def _open_isbn_dialog(self):
@@ -601,25 +736,28 @@ class BookTrackerApp:
         isbn_dialog.grab_set()
         isbn_dialog.resizable(False, False)
 
-        dialog_frame = ttk.Frame(isbn_dialog, padding="15")
+        # Apply theme to dialong background
+        isbn_dialog.config(bg=self.themes[self.current_theme]['dialog_bg'])
+
+        dialog_frame = ttk.Frame(isbn_dialog, padding="15", style="Themed.TFrame")
         dialog_frame.pack(fill='both', expand=True)
 
         ttk.Label(dialog_frame, text="Enter ISBN (10 and 13 digits):", font=('Arial', 10)).grid(row=0, column=0, sticky='w', pady=5)
         isbn_entry = ttk.Entry(dialog_frame, width=30, font=('Arial', 10))
         isbn_entry.grid(row=0, column=1, sticky='ew', pady=5, padx=5)
 
-        status_label = ttk.Label(dialog_frame, text="", font=('Arial', 9, 'italic'), foreground='blue')
+        status_label = ttk.Label(dialog_frame, text="", font=('Arial', 9, 'italic'), foreground=self.themes[self.current_theme]['text_color'])
         status_label.grid(row=1, column=0, columnspan=2, pady=5)
 
         def search_command():
             isbn = isbn_entry.get().strip()
             self._search_book_by_isbn(isbn, isbn_dialog, status_label)
         
-        button_frame = ttk.Frame(dialog_frame)
+        button_frame = ttk.Frame(dialog_frame, style="Themed.TFrame")
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
 
-        ttk.Button(button_frame, text="Search", command=search_command).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Search", command=isbn_dialog.destroy).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Search", command=search_command, style="Themed.TButton").pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=isbn_dialog.destroy, style="Themed.TButton").pack(side='left', padx=5)
 
         dialog_frame.grid_columnconfigure(1, weight=1) # Make ISBN entry expandable
 
@@ -635,7 +773,7 @@ class BookTrackerApp:
             status_label.config(text="Invalid ISBN. Please enter 10 or 13 digits.", foreground='red')
             return
         
-        status_label.config(text="Searching Open Library...", foreground='blue')
+        status_label.config(text="Searching Open Library...", foreground=self.themes[self.current_theme]['text_color'])
         # Start a new thread for the API call
         thread = threading.Thread(target=self._fetch_book_data_thread, args=(isbn, isbn_dialog, status_label))
         thread.daemon = True # Allow the main program to exit even if this thread is running
@@ -735,7 +873,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = BookTrackerApp(root)
 
-    # keep the window displaying for Windows macOS and Linux
+    # keep the window displaying for Windows and Linux
     try:
         from ctypes import windll
         windll.shcore.SetProcessDpiAwareness(1)
